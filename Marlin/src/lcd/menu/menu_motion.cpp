@@ -403,6 +403,7 @@ void menu_motion() {
   // Disable Steppers
   //
   GCODES_ITEM(MSG_DISABLE_STEPPERS, F("M84"));
+  GCODES_ITEM(MSG_DISABLE_STEPPERS_XY, PSTR("M84 X Y"));
 
   END_MENU();
 }
