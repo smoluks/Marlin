@@ -1973,32 +1973,35 @@ bool Planner::_populate_block(
 
   // Compute direction bit-mask for this block
   AxisBits dm;
-  #if ANY(CORE_IS_XY, MARKFORGED_XY, MARKFORGED_YX)
-    dm.hx = (dist.a > 0);                       // Save the toolhead's true direction in X
-    dm.hy = (dist.b > 0);                       // ...and Y
-    TERN_(HAS_Z_AXIS, dm.z = (dist.c > 0));
+  #if ANY(CORE_IS_XY, CORE_IS_XZ, MARKFORGED_XY, MARKFORGED_YX)
+    dm.hx = (dist.a > 0);                       // True direction in X
+  #endif
+  #if ANY(CORE_IS_XY, CORE_IS_YZ, MARKFORGED_XY, MARKFORGED_YX)
+    dm.hy = (dist.b > 0);                       // True direction in Y
+  #endif
+  #if ANY(CORE_IS_XZ, CORE_IS_YZ)
+    dm.hz = (dist.c > 0);                       // True direction in Z
   #endif
   #if CORE_IS_XY
-    dm.a = (dist.a + dist.b > 0);               // Motor A direction
-    dm.b = (CORESIGN(dist.a - dist.b) > 0);     // Motor B direction
+    dm.a  = (dist.a + dist.b > 0);              // Motor A direction
+    dm.b  = (CORESIGN(dist.a - dist.b) > 0);    // Motor B direction
+    TERN_(HAS_Z_AXIS, dm.z = (dist.c > 0));     // Axis  Z direction
   #elif CORE_IS_XZ
-    dm.hx = (dist.a > 0);                       // Save the toolhead's true direction in X
-    dm.y  = (dist.b > 0);
-    dm.hz = (dist.c > 0);                       // ...and Z
     dm.a  = (dist.a + dist.c > 0);              // Motor A direction
+    dm.y  = (dist.b > 0);                       // Axis  Y direction
     dm.c  = (CORESIGN(dist.a - dist.c) > 0);    // Motor C direction
   #elif CORE_IS_YZ
-    dm.x  = (dist.a > 0);
-    dm.hy = (dist.b > 0);                       // Save the toolhead's true direction in Y
-    dm.hz = (dist.c > 0);                       // ...and Z
+    dm.x  = (dist.a > 0);                       // Axis  X direction
     dm.b  = (dist.b + dist.c > 0);              // Motor B direction
     dm.c  = (CORESIGN(dist.b - dist.c) > 0);    // Motor C direction
   #elif ENABLED(MARKFORGED_XY)
     dm.a = (dist.a TERN(MARKFORGED_INVERSE, -, +) dist.b > 0); // Motor A direction
     dm.b = (dist.b > 0);                        // Motor B direction
+    TERN_(HAS_Z_AXIS, dm.z = (dist.c > 0));     // Axis  Z direction
   #elif ENABLED(MARKFORGED_YX)
     dm.a = (dist.a > 0);                        // Motor A direction
     dm.b = (dist.b TERN(MARKFORGED_INVERSE, -, +) dist.a > 0); // Motor B direction
+    TERN_(HAS_Z_AXIS, dm.z = (dist.c > 0));     // Axis  Z direction
   #else
     XYZ_CODE(
       dm.x = (dist.a > 0),
@@ -2079,11 +2082,11 @@ bool Planner::_populate_block(
 
   /**
    * This part of the code calculates the total length of the movement.
-   * For cartesian bots, the X_AXIS is the real X movement and same for Y_AXIS.
-   * But for corexy bots, that is not true. The "X_AXIS" and "Y_AXIS" motors (that should be named to A_AXIS
-   * and B_AXIS) cannot be used for X and Y length, because A=X+Y and B=X-Y.
-   * So we need to create other 2 "AXIS", named X_HEAD and Y_HEAD, meaning the real displacement of the Head.
-   * Having the real displacement of the head, we can calculate the total movement length and apply the desired speed.
+   * For cartesian bots, the distance along the X axis equals the X_AXIS joint displacement and same holds true for Y_AXIS.
+   * But for geometries like CORE_XY that is not true. For these machines we need to create 2 additional variables, named X_HEAD and Y_HEAD, to store the displacent of the head along the X and Y axes in a cartesian coordinate system.
+   * The displacement of the head along the axes of the cartesian coordinate system has to be calculated from "X_AXIS" and "Y_AXIS" (should be renamed to A_JOINT and B_JOINT)
+   * displacements in joints space using forward kinematics (A=X+Y and B=X-Y in the case of CORE_XY).
+   * Next we can calculate the total movement length and apply the desired speed.
    */
   struct DistanceMM : abce_float_t {
     #if ANY(IS_CORE, MARKFORGED_XY, MARKFORGED_YX)
@@ -2308,6 +2311,10 @@ bool Planner::_populate_block(
   // Example 2: At 120°/s a 60° move involving only rotational axes takes 0.5s. So this will give 2.0.
   float inverse_secs = inverse_millimeters * (
     #if ALL(HAS_ROTATIONAL_AXES, INCH_MODE_SUPPORT)
+      /**
+       * Workaround for premature feedrate conversion
+       * from in/s to mm/s by get_distance_from_command.
+       */
       cartesian_move ? fr_mm_s : LINEAR_UNIT(fr_mm_s)
     #else
       fr_mm_s
@@ -2385,14 +2392,12 @@ bool Planner::_populate_block(
     #endif
 
     const feedRate_t cs = ABS(current_speed.e),
-                 max_fr = settings.max_feedrate_mm_s[E_AXIS_N(extruder)]
-                          * TERN(HAS_MIXER_SYNC_CHANNEL, MIXING_STEPPERS, 1);
+                 max_fr = MUL_TERN(HAS_MIXER_SYNC_CHANNEL, settings.max_feedrate_mm_s[E_AXIS_N(extruder)], MIXING_STEPPERS);
 
-    if (cs > max_fr) NOMORE(speed_factor, max_fr / cs); //respect max feedrate on any movement (doesn't matter if E axes only or not)
+    if (cs > max_fr) NOMORE(speed_factor, max_fr / cs); // Respect max feedrate on any move (travel and print)
 
     #if ENABLED(VOLUMETRIC_EXTRUDER_LIMIT)
-      const feedRate_t max_vfr = volumetric_extruder_feedrate_limit[extruder]
-                                 * TERN(HAS_MIXER_SYNC_CHANNEL, MIXING_STEPPERS, 1);
+      const feedRate_t max_vfr = MUL_TERN(HAS_MIXER_SYNC_CHANNEL, volumetric_extruder_feedrate_limit[extruder], MIXING_STEPPERS);
 
       // TODO: Doesn't work properly for joined segments. Set MIN_STEPS_PER_SEGMENT 1 as workaround.
 
@@ -2458,11 +2463,7 @@ bool Planner::_populate_block(
   #if ENABLED(LIN_ADVANCE)
     bool use_advance_lead = false;
   #endif
-  if (true NUM_AXIS_GANG(
-      && !block->steps.a, && !block->steps.b, && !block->steps.c,
-      && !block->steps.i, && !block->steps.j, && !block->steps.k,
-      && !block->steps.u, && !block->steps.v, && !block->steps.w)
-  ) {                                                             // Is this a retract / recover move?
+  if (!ANY_AXIS_MOVES(block)) {                                   // Is this a retract / recover move?
     accel = CEIL(settings.retract_acceleration * steps_per_mm);   // Convert to: acceleration steps/sec^2
   }
   else {
@@ -2895,10 +2896,12 @@ void Planner::buffer_sync_block(const BlockFlagBit sync_flag/*=BLOCK_BIT_SYNC_PO
   block->flag.apply(sync_flag);
 
   block->position = position;
+
   #if ENABLED(BACKLASH_COMPENSATION)
     LOOP_NUM_AXES(axis) block->position[axis] += backlash.get_applied_steps((AxisEnum)axis);
   #endif
-  #if ALL(HAS_FAN, LASER_SYNCHRONOUS_M106_M107)
+
+  #if ENABLED(LASER_SYNCHRONOUS_M106_M107)
     FANS_LOOP(i) block->fan_speed[i] = thermalManager.fan_speed[i];
   #endif
 
@@ -3227,6 +3230,10 @@ bool Planner::buffer_line(const xyze_pos_t &cart, const_feedRate_t fr_mm_s
  * The provided ABCE position is in machine units.
  */
 void Planner::set_machine_position_mm(const abce_pos_t &abce) {
+
+  // When FT Motion is enabled, call synchronize() here instead of generating a sync block
+  if (TERN0(FT_MOTION, ftMotion.cfg.mode)) synchronize();
+
   TERN_(DISTINCT_E_FACTORS, last_extruder = active_extruder);
   TERN_(HAS_POSITION_FLOAT, position_float = abce);
   position.set(
@@ -3386,8 +3393,12 @@ void Planner::set_max_feedrate(const AxisEnum axis, float inMaxFeedrateMMS) {
         #ifdef MAX_JERK_EDIT_VALUES
           MAX_JERK_EDIT_VALUES
         #else
-          { (DEFAULT_XJERK) * 2, (DEFAULT_YJERK) * 2,
-            (DEFAULT_ZJERK) * 2, (DEFAULT_EJERK) * 2 }
+          LOGICAL_AXIS_ARRAY(
+            (DEFAULT_EJERK) * 2,
+            (DEFAULT_XJERK) * 2, (DEFAULT_YJERK) * 2, (DEFAULT_ZJERK) * 2,
+            (DEFAULT_IJERK) * 2, (DEFAULT_JJERK) * 2, (DEFAULT_KJERK) * 2,
+            (DEFAULT_UJERK) * 2, (DEFAULT_VJERK) * 2, (DEFAULT_WJERK) * 2
+          )
         #endif
       ;
       limit_and_warn(inMaxJerkMMS, axis, F("Jerk"), max_jerk_edit);

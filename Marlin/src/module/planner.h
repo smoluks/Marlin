@@ -125,7 +125,6 @@ enum BlockFlagBit {
   // Direct stepping page
   OPTARG(DIRECT_STEPPING, BLOCK_BIT_PAGE)
 
-
   // Sync the fan speeds from the block
   OPTARG(LASER_SYNCHRONOUS_M106_M107, BLOCK_BIT_SYNC_FANS)
 
@@ -215,9 +214,10 @@ typedef struct PlannerBlock {
 
   volatile block_flags_t flag;              // Block flags
 
-  bool is_fan_sync() { return TERN0(LASER_SYNCHRONOUS_M106_M107, flag.sync_fans); }
-  bool is_pwr_sync() { return TERN0(LASER_POWER_SYNC, flag.sync_laser_pwr); }
-  bool is_sync() { return flag.sync_position || is_fan_sync() || is_pwr_sync(); }
+  bool is_sync_pos() { return flag.sync_position; }
+  bool is_sync_fan() { return TERN0(LASER_SYNCHRONOUS_M106_M107, flag.sync_fans); }
+  bool is_sync_pwr() { return TERN0(LASER_POWER_SYNC, flag.sync_laser_pwr); }
+  bool is_sync() { return is_sync_pos() || is_sync_fan() || is_sync_pwr(); }
   bool is_page() { return TERN0(DIRECT_STEPPING, flag.page); }
   bool is_move() { return !(is_sync() || is_page()); }
 
@@ -454,7 +454,6 @@ class Planner {
     static uint16_t cleaning_buffer_counter;        // A counter to disable queuing of blocks
     static uint8_t delay_before_delivering;         // This counter delays delivery of blocks when queue becomes empty to allow the opportunity of merging blocks
 
-
     #if ENABLED(DISTINCT_E_FACTORS)
       static uint8_t last_extruder;                 // Respond to extruder change
     #endif
@@ -635,7 +634,7 @@ class Planner {
 
     #if HAS_EXTRUDERS
       FORCE_INLINE static void refresh_e_factor(const uint8_t e) {
-        e_factor[e] = flow_percentage[e] * 0.01f * TERN(NO_VOLUMETRICS, 1.0f, volumetric_multiplier[e]);
+        e_factor[e] = flow_percentage[e] * 0.01f IF_DISABLED(NO_VOLUMETRICS, * volumetric_multiplier[e]);
       }
 
       static void set_flow(const uint8_t e, const int16_t flow) {
@@ -1124,5 +1123,11 @@ class Planner {
 };
 
 #define PLANNER_XY_FEEDRATE() _MIN(planner.settings.max_feedrate_mm_s[X_AXIS], planner.settings.max_feedrate_mm_s[Y_AXIS])
+
+#define ANY_AXIS_MOVES(BLOCK)  \
+  (false NUM_AXIS_GANG(        \
+  || BLOCK->steps.a, || BLOCK->steps.b, || BLOCK->steps.c, \
+  || BLOCK->steps.i, || BLOCK->steps.j, || BLOCK->steps.k, \
+  || BLOCK->steps.u, || BLOCK->steps.v, || BLOCK->steps.w))
 
 extern Planner planner;
