@@ -1992,7 +1992,7 @@
 // Commands to execute on filament runout.
 // With multiple runout sensors use the %c placeholder for the current tool in commands (e.g., "M600 T%c")
 // NOTE: After 'M412 H1' the host handles filament runout and this script does not apply.
-#define FILAMENT_RUNOUT_SCRIPT "M25"
+#define FILAMENT_RUNOUT_SCRIPT "M600"
 
   // After a runout is detected, continue printing this length of filament
   // before executing the runout script. Useful for a sensor at the end of
@@ -3613,7 +3613,7 @@
   #define NEOPIXEL_BKGD_INDEX_FIRST   0 // Index of the first background LED
   #define NEOPIXEL_BKGD_INDEX_LAST    1 // Index of the last background LED
   #define NEOPIXEL_BKGD_COLOR         { 255, 255, 255, 0 }  // R, G, B, W
-  //#define NEOPIXEL_BKGD_TIMEOUT_COLOR {  25,  25,  25, 0 }  // R, G, B, W
+  #define NEOPIXEL_BKGD_TIMEOUT_COLOR {  25,  25,  25, 0 }  // R, G, B, W
   #define NEOPIXEL_BKGD_ALWAYS_ON       // Keep the backlight on when other NeoPixels are off
 #endif
 
