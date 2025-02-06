@@ -147,8 +147,8 @@
 //
 #define HEATER_0_PIN                        PC8   // "HE"
 #define HEATER_BED_PIN                      PC9   // "HB"
-#define FAN0_PIN                            PC6   // "FAN0"
-#define FAN1_PIN                            PC7   // "FAN1"
+#define E0_AUTO_FAN_PIN                     PC6   // "FAN0"
+#define FAN0_PIN                            PC7   // "FAN1"
 #define FAN2_PIN                            PB15  // "FAN2"
 
 /**
@@ -164,9 +164,9 @@
  */
 #define EXP1_01_PIN                         PB5
 #define EXP1_02_PIN                         PA15
-#define EXP1_03_PIN                         -1
+#define EXP1_03_PIN                         PA9 //it's uart1 by default
 #define EXP1_04_PIN                         -1
-#define EXP1_05_PIN                         -1
+#define EXP1_05_PIN                         PA10 //it's uart1 by default
 #define EXP1_06_PIN                         PB9
 #define EXP1_07_PIN                         PB8
 #define EXP1_08_PIN                         PD6
